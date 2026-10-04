@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        #logo {
+            position: absolute;
+            left: 50%;
+            top: 2%;
+            width: 140px;
+            transform: translateX(-50%);
+            user-select: none;
+            -webkit-user-drag: none;
+            opacity: .9;
+        }
+
+        #logo.edit {
+            outline: 2px dashed #fff;
+            cursor: move;
+        }
+
+        #hint {
+            display: none;
+            position: absolute;
+            bottom: 5%;
+            width: 100%;
+            text-align: center;
+            color: #fff;
+            font: 16px sans-serif;
+            text-shadow: 0 0 4px #000;
+        }
+    </style>
+</head>
+
+<body>
+    <img id="logo" src="logo.png">
+    <div id="hint">Arraste para mover • Scroll para redimensionar • Enter ou clique direito para salvar</div>
+    <script>
+        const res = GetParentResourceName();
+        const logo = document.getElementById('logo');
+        const hint = document.getElementById('hint');
+        let editing = false, dragging = false, offX = 0, offY = 0;
+        let state = { x: 50, y: 2, size: 140 }; // x/y em % da tela
+
+        function apply() {
+            logo.style.left = state.x + '%';
+            logo.style.top = state.y + '%';
+            logo.style.width = state.size + 'px';
+        }
+
+        fetch(`https://${res}/ready`, { method: 'POST', body: '{}' })
+            .then(r => r.json())
+            .then(d => { if (d.pos) { state = d.pos; } apply(); });
+
+        window.addEventListener('message', e => {
+            const d = e.data;
+            if (d.action === 'edit') {
+                editing = d.state;
+                logo.classList.toggle('edit', editing);
+                hint.style.display = editing ? 'block' : 'none';
+            }
+            if (d.action === 'visible') logo.style.display = d.state ? 'block' : 'none';
+        });
+
+        logo.addEventListener('mousedown', e => {
+            if (!editing || e.button !== 0) return;
+            dragging = true;
+            const r = logo.getBoundingClientRect();
+            offX = e.clientX - (r.left + r.width / 2);
+            offY = e.clientY - r.top;
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (!dragging) return;
+            state.x = (e.clientX - offX) / window.innerWidth * 100;
+            state.y = (e.clientY - offY) / window.innerHeight * 100;
+            apply();
+        });
+
+        window.addEventListener('mouseup', () => dragging = false);
+
+        window.addEventListener('wheel', e => {
+            if (!editing) return;
+            state.size = Math.min(600, Math.max(40, state.size - Math.sign(e.deltaY) * 10));
+            apply();
+        });
+
+        function save() {
+            if (!editing) return;
+            fetch(`https://${res}/save`, { method: 'POST', body: JSON.stringify(state) });
+            editing = false;
+            logo.classList.remove('edit');
+            hint.style.display = 'none';
+        }
+        window.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+        window.addEventListener('contextmenu', e => { e.preventDefault(); save(); });
+    </script>
+</body>
+
+</html>
